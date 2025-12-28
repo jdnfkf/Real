@@ -1,0 +1,123 @@
+-- 可拖动的手机端UI执行器
+local MobileExecutor = (function()
+    -- 创建UI
+    local Player = game:GetService("Players").LocalPlayer
+    local PlayerGui = Player:WaitForChild("PlayerGui")
+    
+    -- 主界面
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "MobileExecutor"
+    ScreenGui.Parent = PlayerGui
+    
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Size = UDim2.new(0.8, 0, 0.6, 0)
+    MainFrame.Position = UDim2.new(0.1, 0, 0.2, 0)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    MainFrame.Active = true
+    MainFrame.Draggable = true
+    MainFrame.Parent = ScreenGui
+    
+    -- 标题栏
+    local TitleBar = Instance.new("Frame")
+    TitleBar.Size = UDim2.new(1, 0, 0.1, 0)
+    TitleBar.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    TitleBar.Parent = MainFrame
+    
+    local Title = Instance.new("TextLabel")
+    Title.Text = "FE执行器 v1.0"
+    Title.Size = UDim2.new(1, 0, 1, 0)
+    Title.BackgroundTransparency = 1
+    Title.TextColor3 = Color3.new(1, 1, 1)
+    Title.Parent = TitleBar
+    
+    -- 关闭按钮
+    local CloseButton = Instance.new("TextButton")
+    CloseButton.Text = "X"
+    CloseButton.Size = UDim2.new(0.1, 0, 1, 0)
+    CloseButton.Position = UDim2.new(0.9, 0, 0, 0)
+    CloseButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    CloseButton.TextColor3 = Color3.new(1, 1, 1)
+    CloseButton.Parent = TitleBar
+    
+    CloseButton.MouseButton1Click:Connect(function()
+        ScreenGui:Destroy()
+    end)
+    
+    -- 代码输入框
+    local CodeBox = Instance.new("TextBox")
+    CodeBox.PlaceholderText = "输入代码，例如: require(95402560271383).JK_teamGUIv4(\"\")"
+    CodeBox.Size = UDim2.new(0.9, 0, 0.6, 0)
+    CodeBox.Position = UDim2.new(0.05, 0, 0.15, 0)
+    CodeBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    CodeBox.TextColor3 = Color3.new(1, 1, 1)
+    CodeBox.TextXAlignment = Enum.TextXAlignment.Left
+    CodeBox.TextYAlignment = Enum.TextYAlignment.Top
+    CodeBox.MultiLine = true
+    CodeBox.TextWrapped = true
+    CodeBox.Parent = MainFrame
+    
+    -- 执行按钮
+    local ExecuteButton = Instance.new("TextButton")
+    ExecuteButton.Text = "执行"
+    ExecuteButton.Size = UDim2.new(0.4, 0, 0.1, 0)
+    ExecuteButton.Position = UDim2.new(0.3, 0, 0.8, 0)
+    ExecuteButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+    ExecuteButton.TextColor3 = Color3.new(1, 1, 1)
+    ExecuteButton.Parent = MainFrame
+    
+    -- 执行逻辑
+    ExecuteButton.MouseButton1Click:Connect(function()
+        local code = CodeBox.Text
+        if code == "" then return end
+        
+        -- 使用loadstring执行
+        local success, err = pcall(function()
+            local fn = loadstring(code)
+            if fn then fn() end
+        end)
+        
+        if not success then
+            warn("执行失败:", err)
+        end
+    end)
+    
+    -- 触摸优化
+    local touchStartPos, frameStartPos
+    local UserInputService = game:GetService("UserInputService")
+    
+    UserInputService.TouchStarted:Connect(function(touch, gameProcessed)
+        if gameProcessed then return end
+        local touchPos = touch.Position
+        local framePos = MainFrame.AbsolutePosition
+        local frameSize = MainFrame.AbsoluteSize
+        
+        if touchPos.X >= framePos.X and touchPos.X <= framePos.X + frameSize.X and
+           touchPos.Y >= framePos.Y and touchPos.Y <= framePos.Y + frameSize.Y then
+            touchStartPos = touchPos
+            frameStartPos = MainFrame.Position
+        end
+    end)
+    
+    UserInputService.TouchMoved:Connect(function(touch, gameProcessed)
+        if gameProcessed or not touchStartPos or not frameStartPos then return end
+        
+        local delta = touch.Position - touchStartPos
+        local newX = frameStartPos.X.Offset + delta.X
+        local newY = frameStartPos.Y.Offset + delta.Y
+        
+        MainFrame.Position = UDim2.new(0, newX, 0, newY)
+    end)
+    
+    UserInputService.TouchEnded:Connect(function()
+        touchStartPos = nil
+        frameStartPos = nil
+    end)
+    
+    return ScreenGui
+end)()
+
+-- 自动打开UI
+task.spawn(function()
+    repeat task.wait() until game:IsLoaded()
+    MobileExecutor.Enabled = true
+end)

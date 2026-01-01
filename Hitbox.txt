@@ -1,0 +1,54 @@
+-- MobileHitboxExpander.lua
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- 配置
+local HITBOX_RADIUS = 10  -- 攻击范围半径
+local DEBUG_MODE = false  -- 设为true可显示红色Hitbox
+
+-- 核心功能
+local function expandHitbox(character)
+    if not character then return end
+    
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then return end
+    
+    -- 创建球形Hitbox
+    local hitbox = Instance.new("Part")
+    hitbox.Name = "MobileHitboxExpander"
+    hitbox.Shape = Enum.PartType.Ball
+    hitbox.Size = Vector3.new(HITBOX_RADIUS, HITBOX_RADIUS, HITBOX_RADIUS)
+    hitbox.Transparency = DEBUG_MODE and 0.5 or 1
+    hitbox.CanCollide = false
+    hitbox.Anchored = false
+    hitbox.Color = Color3.fromRGB(255, 0, 0)
+    hitbox.Parent = character
+
+    -- 绑定到角色
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0 = humanoidRootPart
+    weld.Part1 = hitbox
+    weld.Parent = hitbox
+
+    -- 命中检测
+    hitbox.Touched:Connect(function(otherPart)
+        local otherCharacter = otherPart.Parent
+        if otherCharacter:FindFirstChildOfClass("Humanoid") then
+            local otherPlayer = Players:GetPlayerFromCharacter(otherCharacter)
+            if otherPlayer and otherPlayer ~= LocalPlayer then
+                otherCharacter.Humanoid:TakeDamage(10)
+                if DEBUG_MODE then
+                    warn("[命中] 目标: " .. otherPlayer.Name)
+                end
+            end
+        end
+    end)
+end
+
+-- 初始化
+if LocalPlayer.Character then
+    expandHitbox(LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(expandHitbox)
+
+return "✅ 手机端Hitbox扩展已加载 (半径: "..HITBOX_RADIUS..")"

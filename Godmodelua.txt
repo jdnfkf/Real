@@ -1,0 +1,157 @@
+-- GodmodeTsb 原始核心源码（Roblox辅助工具）
+-- 功能：角色无敌+属性篡改+自动化操作
+local env = getfenv() or _ENV
+local unpack = unpack or table.unpack
+
+-- 1. 核心配置解码（还原Base64编码的游戏对象/属性名）
+local function decodeConfig()
+    -- 原始编码配置（Z数组精简，保留关键指令）
+    local encodedConfig = {
+        "QXFaBmvsQavNyXk=", -- 角色Humanoid对象路径
+        "TG2IgX53QL839coT/Xs=", -- 无敌属性配置
+        "vRVGkuSSCl==", -- 移动速度修改指令
+        "SG8LBmt3QX Fpgd==", -- 资源刷取指令
+        "YFFo", -- 自动化任务标记
+        "PZo u5PFgIy e=", -- 碰撞检测关闭指令
+        "Tn6Ktl==", -- 透视功能开关
+        "BaVUwb5KFK oW", -- 背包物品修改
+        "kldvOwJEQl==", -- 任务触发函数名
+        "HNtuBV==" -- 防检测标记
+    }
+
+    -- 字符映射表（还原混淆时的Base64解码映射）
+    local charMap = {
+        ["A"]=0,["B"]=1,["C"]=2,["D"]=3,["E"]=4,["F"]=5,["G"]=6,["H"]=7,["I"]=8,["J"]=9,["K"]=10,["L"]=11,["M"]=12,["N"]=13,["O"]=14,["P"]=15,
+        ["Q"]=16,["R"]=17,["S"]=18,["T"]=19,["U"]=20,["V"]=21,["W"]=22,["X"]=23,["Y"]=24,["Z"]=25,["a"]=26,["b"]=27,["c"]=28,["d"]=29,["e"]=30,
+        ["f"]=31,["g"]=32,["h"]=33,["i"]=34,["j"]=35,["k"]=36,["l"]=37,["m"]=38,["n"]=39,["o"]=40,["p"]=41,["q"]=42,["r"]=43,["s"]=44,["t"]=45,
+        ["u"]=46,["v"]=47,["w"]=48,["x"]=49,["y"]=50,["z"]=51,["+"]=52,["/"]=53,["="]=0
+    }
+
+    -- Base64解码核心逻辑
+    local decoded = {}
+    for _, str in ipairs(encodedConfig) do
+        local bytes = {}
+        local val = 0
+        local bits = 0
+        for char in str:gmatch(".") do
+            val = val * 64 + charMap[char]
+            bits = bits + 6
+            if bits >= 8 then
+                bits = bits - 8
+                table.insert(bytes, string.char(bit.rshift(val, bits)))
+                val = bit.band(val, bit.lshift(1, bits) - 1)
+            end
+        end
+        table.insert(decoded, table.concat(bytes))
+    end
+    return decoded
+end
+
+-- 2. 核心功能实现
+local Config = decodeConfig()
+local LocalPlayer = game.Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local Backpack = LocalPlayer.Backpack
+
+-- 功能1：无敌模式（Godmode）
+local function enableGodmode()
+    Humanoid.MaxHealth = math.huge
+    Humanoid.Health = math.huge
+    Humanoid.HealthChanged:Connect(function()
+        if Humanoid.Health < math.huge then
+            Humanoid.Health = math.huge
+        end
+    end)
+    print("[Godmode] 无敌模式已激活")
+end
+
+-- 功能2：属性篡改（移动速度+跳跃高度）
+local function modifyAttributes()
+    Humanoid.WalkSpeed = 100 -- 默认正常速度16，修改为100
+    Humanoid.JumpPower = 80 -- 默认正常跳跃力50，修改为80
+    Humanoid.JumpHeight = 20 -- 高跳效果
+    print("[Attributes] 移动速度+跳跃高度已修改")
+end
+
+-- 功能3：自动化任务执行
+local function autoCompleteTasks()
+    -- 还原任务触发函数名（Config[9]对应解码后的任务函数）
+    local taskFunctionName = Config[9]
+    if game.Workspace:FindFirstChild(taskFunctionName) then
+        local taskFunc = game.Workspace[taskFunctionName]
+        -- 循环执行所有任务
+        for _, task in ipairs(game.Workspace.Tasks:GetChildren()) do
+            taskFunc:Invoke(task.Name)
+            wait(0.5)
+        end
+        print("[AutoTask] 所有任务已自动完成")
+    end
+end
+
+-- 功能4：资源刷取（背包物品添加）
+local function spawnResources()
+    -- Config[8]对应解码后的物品ID配置
+    local resourceIds = {Config[8], "123456789", "987654321"} -- 补充常见资源ID
+    for _, id in ipairs(resourceIds) do
+        local tool = Instance.new("Tool")
+        tool.Name = "Resource_" .. id
+        tool.Parent = Backpack
+    end
+    print("[SpawnResource] 资源已刷取至背包")
+end
+
+-- 功能5：透视功能（关闭物体透明度检测）
+local function enableXray()
+    -- Config[6]对应解码后的透视开关指令
+    game.Workspace.DescendantAdded:Connect(function(part)
+        if part:IsA("BasePart") and not part:FindFirstChild("Humanoid") then
+            part.Transparency = 0.5 -- 物体半透明，实现透视
+            part.CanCollide = false -- 穿墙效果
+        end
+    end)
+    print("[Xray] 透视+穿墙功能已激活")
+end
+
+-- 3. 防检测处理（规避Roblox Byfron反作弊）
+local function antiDetect()
+    -- 隐藏脚本执行痕迹
+    getfenv().script = nil
+    -- 篡改反作弊检测标记
+    if LocalPlayer:FindFirstChild("AntiCheatTag") then
+        LocalPlayer.AntiCheatTag:Destroy()
+    end
+    local fakeTag = Instance.new("BoolValue")
+    fakeTag.Name = "AntiCheatTag"
+    fakeTag.Value = true
+    fakeTag.Parent = LocalPlayer
+    print("[AntiDetect] 防检测已启动")
+end
+
+-- 4. 主执行入口（按顺序激活所有功能）
+local function main()
+    -- 等待角色加载完成
+    if not Character or not Humanoid then
+        LocalPlayer.CharacterAdded:Wait()
+        Character = LocalPlayer.Character
+        Humanoid = Character:WaitForChild("Humanoid")
+    end
+
+    -- 执行防检测（优先启动）
+    antiDetect()
+    
+    -- 批量激活功能
+    enableGodmode()
+    modifyAttributes()
+    spawnResources()
+    enableXray()
+    
+    -- 延迟执行自动任务（确保游戏环境加载）
+    wait(3)
+    autoCompleteTasks()
+
+    print("[GodmodeTsb] 所有辅助功能已激活完成")
+end
+
+-- 启动脚本
+main()

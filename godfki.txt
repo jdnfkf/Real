@@ -1,0 +1,229 @@
+--// XMAN-HUB — ENHANCED EDITION (改进版)
+--// Owner: Brint | Modified by 优化适配
+if getgenv().XMAN_HUB_ENHANCED then return end
+getgenv().XMAN_HUB_ENHANCED = true
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ==============================
+-- 状态管理（新增复活相关变量）
+-- ==============================
+local ImmortalityEnabled = false
+local RespawnEnabled = true -- 默认开启原地复活
+local lastSafePos = nil -- 记录安全位置
+local HealthLockConn
+local DeathConn
+local CharConn
+local PosRecordConn -- 位置记录连接
+
+-- ==============================
+-- 核心功能（新增原地复活+强化无敌）
+-- ==============================
+-- 实时记录安全位置（防卡地形）
+local function StartPosRecording()
+    if PosRecordConn then PosRecordConn:Disconnect() end
+    PosRecordConn = RunService.Heartbeat:Connect(function(deltaTime)
+        local character = LocalPlayer.Character
+        if not character or not RespawnEnabled then return end
+        local hrp = character:FindFirstChild("HumanoidRootPart")
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if hrp and humanoid and humanoid.Health > 0 then
+            -- 每0.2秒更新一次，平衡精准度与性能
+            if (tick() % 0.2) < deltaTime then
+                lastSafePos = hrp.Position
+            end
+        end
+    end)
+end
+
+-- 强化无敌+原地复活逻辑
+local function ApplyImmortality(character)
+    local humanoid = character:WaitForChild("Humanoid", 8) -- 延长超时，适配低性能设备
+    if not humanoid then return end
+    
+    -- 基础无敌设置
+    humanoid.BreakJointsOnDeath = false
+    humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+    
+    -- 断开旧连接，避免内存泄漏
+    if HealthLockConn then HealthLockConn:Disconnect() end
+    if DeathConn then DeathConn:Disconnect() end
+    
+    -- 双重回血：心跳检测+死亡事件拦截（反强制死亡）
+    HealthLockConn = RunService.Heartbeat:Connect(function()
+        if ImmortalityEnabled and humanoid.Health < humanoid.MaxHealth then
+            humanoid.Health = humanoid.MaxHealth
+        end
+    end)
+    
+    DeathConn = humanoid.Died:Connect(function()
+        if ImmortalityEnabled then
+            -- 强制复活+回满生命值
+            humanoid.Health = humanoid.MaxHealth
+            humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+            -- 原地复活：传送到记录位置
+            local hrp = character:FindFirstChild("HumanoidRootPart")
+            if hrp and lastSafePos and RespawnEnabled then
+                hrp.CFrame = CFrame.new(lastSafePos + Vector3.new(0, 1.5, 0)) -- 防卡地
+            end
+        end
+    end)
+    
+    -- 初始化位置记录
+    if RespawnEnabled and not PosRecordConn then
+        StartPosRecording()
+    end
+end
+
+-- 开启无敌
+local function EnableImmortality()
+    ImmortalityEnabled = true
+    if LocalPlayer.Character then
+        ApplyImmortality(LocalPlayer.Character)
+    end
+    StartPosRecording() -- 启动位置记录
+end
+
+-- 关闭无敌
+local function DisableImmortality()
+    ImmortalityEnabled = false
+    if HealthLockConn then HealthLockConn:Disconnect() end
+    if DeathConn then DeathConn:Disconnect() end
+end
+
+-- 切换原地复活
+local function ToggleRespawn()
+    RespawnEnabled = not RespawnEnabled
+    if RespawnEnabled then
+        StartPosRecording()
+        print("[XMAN-HUB] 原地复活已开启")
+    else
+        if PosRecordConn then PosRecordConn:Disconnect() end
+        print("[XMAN-HUB] 原地复活已关闭")
+    end
+end
+
+-- ==============================
+-- 角色生成自动绑定（优化稳定性）
+-- ==============================
+CharConn = LocalPlayer.CharacterAdded:Connect(function(char)
+    if ImmortalityEnabled then
+        task.wait(0.5) -- 延长延迟，确保角色加载完成
+        ApplyImmortality(char)
+    end
+end)
+
+-- ==============================
+-- 增强版GUI（新增复活开关+美化）
+-- ==============================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "XMAN-HUB-ENHANCED"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game:GetService("CoreGui")
+
+-- 主框架
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size = UDim2.fromScale(0.25, 0.25) -- 扩大尺寸，容纳更多功能
+Main.Position = UDim2.fromScale(0.375, 0.35)
+Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = true
+
+-- 圆角+阴影（美化）
+local UICorner = Instance.new("UICorner", Main)
+UICorner.CornerRadius = UDim.new(0, 15)
+local UIGradient = Instance.new("UIGradient", Main)
+UIGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 30, 30)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 10, 10))
+})
+
+-- 标题
+local Title = Instance.new("TextLabel", Main)
+Title.Size = UDim2.new(1, 0, 0.25, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "XMAN-HUB | ENHANCED"
+Title.TextColor3 = Color3.fromRGB(0, 200, 100)
+Title.Font = Enum.Font.GothamBold
+Title.TextScaled = true
+Title.TextStrokeTransparency = 0.8
+Title.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+
+-- 无敌开关按钮
+local ImmortalityToggle = Instance.new("TextButton", Main)
+ImmortalityToggle.Size = UDim2.new(0.85, 0, 0.28, 0)
+ImmortalityToggle.Position = UDim2.new(0.075, 0, 0.3, 0)
+ImmortalityToggle.Text = "IMMORTALITY : OFF"
+ImmortalityToggle.Font = Enum.Font.GothamBold
+ImmortalityToggle.TextScaled = true
+ImmortalityToggle.TextColor3 = Color3.new(1, 1, 1)
+ImmortalityToggle.BackgroundColor3 = Color3.fromRGB(140, 0, 0)
+ImmortalityToggle.BorderSizePixel = 0
+local ImmortalityCorner = Instance.new("UICorner", ImmortalityToggle)
+ImmortalityCorner.CornerRadius = UDim.new(0, 12)
+
+-- 原地复活开关按钮
+local RespawnToggle = Instance.new("TextButton", Main)
+RespawnToggle.Size = UDim2.new(0.85, 0, 0.28, 0)
+RespawnToggle.Position = UDim2.new(0.075, 0, 0.65, 0)
+RespawnToggle.Text = "SPAWN HERE : ON"
+RespawnToggle.Font = Enum.Font.GothamBold
+RespawnToggle.TextScaled = true
+RespawnToggle.TextColor3 = Color3.new(1, 1, 1)
+RespawnToggle.BackgroundColor3 = Color3.fromRGB(0, 140, 0)
+RespawnToggle.BorderSizePixel = 0
+local RespawnCorner = Instance.new("UICorner", RespawnToggle)
+RespawnCorner.CornerRadius = UDim.new(0, 12)
+
+-- ==============================
+-- 按钮逻辑+快捷键控制（新增）
+-- ==============================
+-- 无敌开关
+ImmortalityToggle.MouseButton1Click:Connect(function()
+    ImmortalityEnabled = not ImmortalityEnabled
+    if ImmortalityEnabled then
+        ImmortalityToggle.Text = "IMMORTALITY : ON"
+        ImmortalityToggle.BackgroundColor3 = Color3.fromRGB(0, 160, 0)
+        EnableImmortality()
+    else
+        ImmortalityToggle.Text = "IMMORTALITY : OFF"
+        ImmortalityToggle.BackgroundColor3 = Color3.fromRGB(140, 0, 0)
+        DisableImmortality()
+    end
+end)
+
+-- 原地复活开关
+RespawnToggle.MouseButton1Click:Connect(function()
+    ToggleRespawn()
+    RespawnToggle.Text = RespawnEnabled and "SPAWN HERE : ON" or "SPAWN HERE : OFF"
+    RespawnToggle.BackgroundColor3 = RespawnEnabled and Color3.fromRGB(0, 140, 0) or Color3.fromRGB(80, 0, 0)
+end)
+
+-- 快捷键控制（F5开/关无敌，F6开/关原地复活）
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.F5 then
+        ImmortalityToggle.MouseButton1Click:Fire() -- 模拟点击无敌按钮
+    elseif input.KeyCode == Enum.KeyCode.F6 then
+        RespawnToggle.MouseButton1Click:Fire() -- 模拟点击复活按钮
+    end
+end)
+
+-- ==============================
+-- 自动应用+防检测优化
+-- ==============================
+-- 清理旧版本残留
+local oldGui = game:GetService("CoreGui"):FindFirstChild("XMAN-HUB")
+if oldGui then oldGui:Destroy() end
+
+-- 初始化当前角色
+if LocalPlayer.Character then
+    ApplyImmortality(LocalPlayer.Character)
+end
+
+-- 输出启动信息
+print("[XMAN-HUB ENHANCED] 加载完成 | 快捷键：F5=无敌，F6=原地复活")
